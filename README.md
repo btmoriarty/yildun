@@ -44,6 +44,17 @@ The voice rules live in [pherkad](https://github.com/btmoriarty/pherkad), the si
 `structlint.py` to add the structural gate. `tools/voice_config.json` ships neutral; customize it for
 your world.
 
+## The run loop
+
+`tools/run.py` closes a unit of work: it validates the changed shareable files against the gate,
+appends one line to the generation log with author identity, and commits, never pushing. Generation is
+done by whatever agent you point at the corpus; this is the harness around it. A gate block stops the
+run before anything is logged or committed.
+
+```
+python3 tools/run.py --note "what this run did" --mode expand
+```
+
 ## Getting material on disk
 
 `references/INTERROGATION.md` is the elicitation protocol: how to draw real material out of memory, one
