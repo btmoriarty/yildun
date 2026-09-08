@@ -57,6 +57,13 @@ python3 tools/run.py --note "what this run did" --mode expand
 
 Pass `--oversight <mode>` (see `tools/oversight-modes.json`) to set the review posture: it raises or lowers gate strictness, commits or holds the commit for you, and records the mode as the study's oversight variable.
 
+## Export
+
+`tools/export.py` is the export gate: it verifies a shippable piece against the gate, strips invisible
+watermark characters so no distributed file carries a hidden mark, renders the shareable prose to a PDF
+with author, title, and date in the PDF metadata, and writes a provenance sidecar. Content Credentials
+(C2PA) embed where the format and c2patool support it.
+
 ## Getting material on disk
 
 `references/INTERROGATION.md` is the elicitation protocol: how to draw real material out of memory, one
