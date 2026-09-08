@@ -55,6 +55,8 @@ run before anything is logged or committed.
 python3 tools/run.py --note "what this run did" --mode expand
 ```
 
+Pass `--oversight <mode>` (see `tools/oversight-modes.json`) to set the review posture: it raises or lowers gate strictness, commits or holds the commit for you, and records the mode as the study's oversight variable.
+
 ## Getting material on disk
 
 `references/INTERROGATION.md` is the elicitation protocol: how to draw real material out of memory, one

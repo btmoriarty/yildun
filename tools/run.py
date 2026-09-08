@@ -20,6 +20,7 @@ be retrofitted: author from world.json `author` or $YILDUN_AUTHOR, engine from $
 """
 import argparse
 import datetime
+import json
 import os
 import subprocess
 import sys
@@ -58,12 +59,31 @@ def main(argv):
     ap.add_argument("--note", required=True, help="what this run did, one line")
     ap.add_argument("--mode", default="run", help="work mode: expand / deliverable / check / infrastructure / ...")
     ap.add_argument("--posture", default="", help="oversight posture (house interaction mode), optional")
+    ap.add_argument("--oversight", default="", help="oversight mode (sets review policy and posture); see tools/oversight-modes.json")
     ap.add_argument("--lanes", default="", help="house extra: lanes touched, e.g. 4,7")
     ap.add_argument("--gen", default="", help="house extra: generations touched")
     ap.add_argument("--strict", action="store_true", help="fail the run on gate warnings, not only errors")
     ap.add_argument("--no-commit", action="store_true", help="validate and log only; do not commit")
     ap.add_argument("--dry-run", action="store_true", help="show the log line and commit; change nothing")
     args = ap.parse_args(argv)
+
+    # Oversight mode: the review posture, and the policy it implies. It sets gate strictness and
+    # whether the run commits or holds the commit for the human, and it is recorded as the study's
+    # independent variable.
+    audit_flag = ""
+    if args.oversight:
+        mpath = os.path.join(HERE, "oversight-modes.json")
+        modes = json.load(open(mpath, encoding="utf-8")).get("modes", {}) if os.path.exists(mpath) else {}
+        pol = modes.get(args.oversight)
+        if not pol:
+            sys.exit(f"run: unknown oversight mode '{args.oversight}'. Known: {', '.join(sorted(modes)) or '(none configured)'}")
+        if pol.get("strict"):
+            args.strict = True
+        if pol.get("commit") == "hold":
+            args.no_commit = True
+        if not args.posture:
+            args.posture = args.oversight
+        audit_flag = pol.get("flag", "")
 
     files = changed_files()
     if not files:
@@ -97,6 +117,8 @@ def main(argv):
         parts.append(f"gen[{args.gen}]")
     parts.append("files: " + ", ".join(files))
     parts.append(args.note)
+    if audit_flag == "audit":
+        parts.append("[audit-pending]")
     parts.append(f"id[author={author} engine={engine}]")
     line = " · ".join(parts)
 

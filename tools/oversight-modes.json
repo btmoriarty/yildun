@@ -1,0 +1,12 @@
+{
+  "_comment": "Oversight modes: the posture of human review over the AI's work, and the run-loop policy each posture implies. The mode is the study's independent variable and is recorded on every run (run.py --oversight). Postures, in the author's framing: in / above / around the loop, and no human. 'strict' promotes gate warnings to failures. 'commit' is 'auto' (the run commits) or 'hold' (the run validates and logs, and the human commits, which is the higher-oversight posture). 'flag: audit' marks the log line for a later human audit.",
+  "modes": {
+    "auto":          { "posture": "none",   "strict": false, "commit": "auto", "note": "the control arm, no oversight" },
+    "audit":         { "posture": "around", "strict": false, "commit": "auto", "flag": "audit", "note": "reviewed after the fact" },
+    "constraint":    { "posture": "around", "strict": false, "commit": "auto", "note": "the human changed the environment, laws, voice, or guardrails" },
+    "commission":    { "posture": "above",  "strict": false, "commit": "auto", "note": "target and guardrails set, the human intervenes by exception" },
+    "interruptible": { "posture": "above",  "strict": false, "commit": "hold", "note": "runs, but pauses at genuine decision forks for the human" },
+    "iterate":       { "posture": "in",     "strict": true,  "commit": "hold", "note": "turn by turn co-writing, the human commits" },
+    "stress":        { "posture": "in",     "strict": true,  "commit": "hold", "note": "adversarial, pushing to break coherence or test a guardrail" }
+  }
+}
