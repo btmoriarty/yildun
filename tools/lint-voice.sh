@@ -48,6 +48,16 @@ fi
 # nothing else, and the six transcription findings in the same file were never printed. **The gate
 # silently shrank to its first tool exactly when a draft was worst.** Same family as every other
 # failure this project has logged: the run reported success at what it did reach.
+# VENDOR DRIFT GUARD (the standing pherkad -> engine sync path). voicelint.py is VENDORED from pherkad,
+# never forked. This confirms the local copy still matches its recorded sha256 before its results are
+# trusted; a drift means someone edited voicelint here instead of in pherkad, and the fix is to
+# re-vendor with tools/sync-voicelint.sh (which needs PHERKAD_VOICELINT). Advisory: it reports and does
+# not block, because re-vendoring is a deliberate step, not this gate's job.
+if [ -f "$here/sync-voicelint.sh" ]; then
+  bash "$here/sync-voicelint.sh" --check >/dev/null 2>&1 || \
+    echo "lint-voice: voicelint.py has DRIFTED from its pherkad vendor record; run tools/sync-voicelint.sh to re-vendor" >&2
+fi
+
 set +e
 python3 "$here/voicelint.py" --config "$cfg" \
   ${flags[@]+"${flags[@]}"} ${files[@]+"${files[@]}"}
