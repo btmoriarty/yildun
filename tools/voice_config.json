@@ -1,0 +1,40 @@
+{
+  "_comment": "Generic voice config for the Yildun engine. Customize it for your world. The deep voice rules live in pherkad (github.com/btmoriarty/pherkad); set WORLD_STRUCTLINT to its structlint.py to enable the structural gate. This ships neutral: universal AI-speak tells only, no world-specific stop-words.",
+  "no_dashes": true,
+  "dash_density_cap": 0,
+  "load_bearing_literal_only": true,
+  "no_honest_framing": true,
+  "banned_phrases": [
+    "it's worth noting that",
+    "it is worth noting that",
+    "at the end of the day",
+    "needless to say",
+    "in today's world"
+  ],
+  "engagement_bait": [
+    "here's the thing",
+    "here's what they don't tell you",
+    "let that sink in",
+    "plot twist",
+    "no one is talking about"
+  ],
+  "soft_phrases": [
+    "it's worth [verb]",
+    "it is worth [verb]"
+  ],
+  "filler_words": [
+    "significant",
+    "crucial",
+    "essential",
+    "vital",
+    "robust",
+    "seamless",
+    "leverage",
+    "utilize",
+    "impactful",
+    "transformative"
+  ],
+  "watch_words": {},
+  "flag_loaded_quietly": true,
+  "aggregator_domains": []
+}

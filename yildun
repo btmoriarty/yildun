@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# Yildun: the front door to the writing system. Wraps the tools so a writer runs plain commands
+# (new / check / surface) and never has to know the script names underneath. Self-locating: it finds
+# its own folder, so it works no matter where Yildun is installed and needs no "cd" first.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TOOLS="$ROOT/tools"
+DRAFTS="$ROOT/drafts"
+
+usage(){ cat <<USAGE
+Yildun, the writing system.
+
+  yildun new   <name>                start a new fiction piece
+  yildun new   <name> --nonfiction   start a new non-fiction piece
+  yildun surface                      show story material you could build from
+  yildun check <name>                 check a piece against every gate
+  yildun amr   <accept|modify|reject> "<note>"   log one AI-suggestion decision, as it happens
+  yildun help                         this
+
+A <name> is a short label like first-piece. Yildun keeps the file for you in the drafts folder and
+tells you where it is. Run the commands with Yildun's full path, for example
+/Users/<you>/Yildun/yildun check first-piece
+
+Set YILDUN_AUTHOR to your name (in your shell profile) so your AMR log records who decided.
+USAGE
+}
+
+resolve(){  # <name-or-path> -> absolute .md path in drafts
+  local a="$1"
+  case "$a" in
+    /*) printf '%s' "$a" ;;
+    *.md) printf '%s/%s' "$DRAFTS" "$a" ;;
+    *) printf '%s/%s.md' "$DRAFTS" "$a" ;;
+  esac
+}
+
+cmd_new(){
+  local name="${1:-}"; shift || true
+  [ -n "$name" ] || { echo "yildun new: give a name, for example: yildun new first-piece"; exit 2; }
+  local nonfiction=0; [ "${1:-}" = "--nonfiction" ] && nonfiction=1
+  mkdir -p "$DRAFTS"
+  local f; f="$(resolve "$name")"
+  [ -e "$f" ] && { echo "yildun new: $f already exists; pick another name."; exit 1; }
+  if [ "$nonfiction" -eq 1 ]; then
+    cat > "$f" <<'TPL'
+---
+mode: nonfiction
+shippable: false
+sources:
+  - example-source: what this source is, in a few words
+consent:
+  - none
+---
+
+# Your title here
+
+Write here. Put a citation right after each claim you make, like this [src:example-source].
+If you name a real living person, add them under consent above with a status
+(consented, public-figure, public-interest, or deceased) and change the "- none" line.
+When it is ready, set shippable to true and check it.
+TPL
+  else
+    cat > "$f" <<'TPL'
+---
+type: composite
+experience: fiction
+shippable: false
+---
+
+# Your title here
+
+Write here. Fuse two or more real sources into one figure, so that no single person survives it.
+Run "yildun surface" first to see what you could build from. When it is ready, set shippable to
+true and check it.
+TPL
+  fi
+  echo "Made $f"
+  printf '%s' "$name" > "$ROOT/.yildun-current"
+  echo "Open that file in any editor and write. Then run:  yildun check $name"
+}
+
+cmd_check(){
+  local name="${1:-}"
+  [ -n "$name" ] || { echo "yildun check: give a name, for example: yildun check first-piece"; exit 2; }
+  local f; f="$(resolve "$name")"
+  [ -e "$f" ] || { echo "yildun check: no piece called '$name'. Make one with: yildun new $name"; exit 1; }
+  printf '%s' "$name" > "$ROOT/.yildun-current"
+  echo "Checking $f"
+  echo
+  if bash "$TOOLS/lint-voice.sh" "$f"; then
+    echo
+    echo "PASSED. Every gate is clean."
+  else
+    local rc=$?
+    echo
+    echo "STOPPED. Fix the first block printed above, save, and run yildun check $name again."
+    exit $rc
+  fi
+}
+
+cmd_surface(){ python3 "$TOOLS/surface-material.py" "$@"; }
+
+cmd_amr(){
+  local verdict="${1:-}"; shift || true
+  case "$verdict" in
+    accept|modify|reject) ;;
+    *) echo "yildun amr: say accept, modify, or reject, then a note. e.g."
+       echo "  yildun amr modify \"tightened the intro, kept the claim\""; exit 2 ;;
+  esac
+  local piece="" effort="" confidence=""; local parts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --piece) piece="${2:-}"; shift 2 ;;
+      --effort) effort="${2:-}"; shift 2 ;;
+      --confidence) confidence="${2:-}"; shift 2 ;;
+      *) parts+=("$1"); shift ;;
+    esac
+  done
+  local name="$piece"
+  if [ -z "$name" ] && [ -f "$ROOT/.yildun-current" ]; then name="$(cat "$ROOT/.yildun-current")"; fi
+  [ -n "$name" ] || { echo "yildun amr: which piece? pass --piece <name>, or run yildun new first."; exit 2; }
+  local f; f="$(resolve "$name")"
+  [ -e "$f" ] || { echo "yildun amr: no piece called '$name'."; exit 1; }
+  local args=(--piece "$f" --verdict "$verdict" --note "${parts[*]:-}")
+  [ -n "$effort" ] && args+=(--effort "$effort")
+  [ -n "$confidence" ] && args+=(--confidence "$confidence")
+  python3 "$TOOLS/amr-log.py" "${args[@]}"
+}
+
+case "${1:-help}" in
+  new)     shift; cmd_new "$@" ;;
+  check)   shift; cmd_check "$@" ;;
+  surface) shift; cmd_surface "$@" ;;
+  amr)     shift; cmd_amr "$@" ;;
+  help|-h|--help) usage ;;
+  *) echo "yildun: unknown command '${1}'"; echo; usage; exit 2 ;;
+esac

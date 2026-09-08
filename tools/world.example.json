@@ -1,0 +1,14 @@
+{
+  "_comment": "Per-world layout for the narrative engine. Copy to world.json at your world root and edit. Every value is optional; omit to accept the convention. Relative paths resolve against the world root (the folder holding this file); structlint must be absolute.",
+  "corpus_dir": "generated/derivations",
+  "captures": "generated/CAPTURED.md",
+  "canon_dir": "canon",
+  "deliverables_dir": "deliverables",
+  "voice_config": "tools/voice_config.json",
+  "gesture_bank": "generated/GESTURE-BANK.md",
+  "shareable_trees": [
+    "canon",
+    "deliverables"
+  ],
+  "structlint": ""
+}

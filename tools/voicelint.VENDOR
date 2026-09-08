@@ -1,0 +1,15 @@
+tools/voicelint.py is VENDORED, NOT FORKED. Do not edit it here.
+
+source   pherkad (github.com/btmoriarty/pherkad): skills/pherkad/tools/voicelint.py
+commit   dcc8715  (2026-09-01)
+vendored 2026-09-06
+sha256   4c93069877dc2ccce5153913298535cd0f3bb152e24328f9c4c008336135ac5a
+Pherkad is the single source of truth for voice. Until 2026-09-01 this copy was 419 lines
+against pherkad's 587 and held three features that existed nowhere else: the honest-X ban at
+error level, the declared phrase exemption, and the rules-file exemption. All three are now
+upstream, so this file is byte-identical to its source and the corpus lints the same as it
+did before the swap.
+
+Fix rules in pherkad, then run tools/sync-voicelint.sh here. Never edit this copy.
+
+
