@@ -40,14 +40,25 @@ def git(*args, check=True):
     return r.stdout
 
 
+def _parse_status(out):
+    """Paths with a pending change, from `git status --porcelain=1 -z`. A rename or copy emits the new
+    path in its record and the old path as the very next NUL-terminated field, so that trailing field
+    is consumed rather than mistaken for a garbled second path."""
+    fields = out.split("\0")
+    files, i = [], 0
+    while i < len(fields):
+        e = fields[i]
+        if len(e) >= 4:
+            files.append(e[3:])          # e is "XY <path>"; for R/C, <path> is the NEW path
+            if e[0] in ("R", "C"):
+                i += 1                   # skip the following field: the old/source path
+        i += 1
+    return files
+
+
 def changed_files():
     """Every path with a pending change (staged, unstaged, or untracked), repo-relative."""
-    out = git("status", "--porcelain=1", "-z")
-    files = []
-    for entry in out.split("\0"):
-        if len(entry) > 3:
-            files.append(entry[3:])
-    return files
+    return _parse_status(git("status", "--porcelain=1", "-z"))
 
 
 def under_trees(files, trees):
