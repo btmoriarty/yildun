@@ -13,9 +13,9 @@ It assembles prose only; a screenplay adapter is a separate format track (deferr
 personal-record draft (status: draft, not canon): assembling does not mask, so the deliverable stays
 exempt from the shareable gates until the author masks it.
 
-    assemble.py --title "The Rivka Thread" --out deliverables/rivka-thread.md \
-                generated/derivations/dead-and-buried.md generated/derivations/one-hundred-and-nine.md
-    assemble.py --title "..." --out ... --carrier Helen
+    assemble.py --title "A Thread" --out deliverables/a-thread.md \
+                generated/derivations/piece-one.md generated/derivations/piece-two.md
+    assemble.py --title "..." --out ... --carrier NAME
 """
 import argparse
 import datetime

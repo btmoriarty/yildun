@@ -42,7 +42,7 @@ import sys
 
 # A single author note walked through in order, this many beats or more, is dictation, not
 # derivation, and it BLOCKS. Calibrated 2026-09-04: a deliberate parrot of a full drop fired at 12
-# beats; author-approved derivations (over-for-good, dead-and-buried) topped out at 3-4, which is the
+# beats; author-approved derivations topped out at 3-4, which is the
 # unavoidable micro-order inside one of his sentences. 6 sits clear of both with margin.
 PARROT_BLOCK_BEATS = 6
 
