@@ -57,6 +57,15 @@ python3 tools/run.py --note "what this run did" --mode expand
 
 Pass `--oversight <mode>` (see `tools/oversight-modes.json`) to set the review posture: it raises or lowers gate strictness, commits or holds the commit for you, and records the mode as the study's oversight variable.
 
+## Assembling a longer work
+
+`tools/assemble.py` builds a deliverable from ordered pieces, their prose under one title, rooted
+through its constituents. For book scale, `--manifest <file>` reads a markdown manifest of parts,
+chapters, and pieces and assembles a structured work with a Contents map; the order and grouping are
+yours, the tool only builds what the manifest declares. `tools/screenplay.py` lays a finished piece out
+in Fountain screenplay format as a format pass, scene headings from section titles and prose as action.
+A screenplay is written, not converted, so treat it as a layout to rework.
+
 ## Export
 
 `tools/export.py` is the export gate: it verifies a shippable piece against the gate, strips invisible

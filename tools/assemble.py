@@ -13,9 +13,9 @@ It assembles prose only; a screenplay adapter is a separate format track (deferr
 personal-record draft (status: draft, not canon): assembling does not mask, so the deliverable stays
 exempt from the shareable gates until the author masks it.
 
-    assemble.py --title "A Thread" --out deliverables/a-thread.md \
-                generated/derivations/piece-one.md generated/derivations/piece-two.md
-    assemble.py --title "..." --out ... --carrier NAME
+    assemble.py --title "The Rivka Thread" --out deliverables/rivka-thread.md \
+                generated/derivations/dead-and-buried.md generated/derivations/one-hundred-and-nine.md
+    assemble.py --title "..." --out ... --carrier Helen
 """
 import argparse
 import datetime
@@ -63,6 +63,83 @@ def carrier_cluster(name):
     return [p for _, p in sorted(out)]
 
 
+def resolve_piece(slug):
+    """A manifest entry: an absolute path, a repo-relative path, or a bare slug found in the corpus or canon."""
+    if os.path.isabs(slug) and os.path.exists(slug):
+        return slug
+    if slug.endswith(".md"):
+        cands = [os.path.join(CFG["root"], slug), os.path.join(CFG["corpus_dir"], os.path.basename(slug))]
+    else:
+        cands = [os.path.join(CFG["corpus_dir"], slug + ".md")]
+        cands += sorted(glob.glob(os.path.join(CFG["canon_dir"], "**", slug + ".md"), recursive=True))
+    return next((c for c in cands if os.path.exists(c)), None)
+
+
+def parse_manifest(path):
+    """A book manifest, markdown: '# Part', '## Chapter', '- piece-slug'. Order and grouping are the
+    author's composition; assemble only builds what the manifest declares, it does not compose."""
+    parts, part, chap = [], None, None
+    for ln in open(path, encoding="utf-8"):
+        s = ln.rstrip("\n")
+        if re.match(r"#\s+\S", s) and not s.startswith("##"):
+            part = {"title": re.match(r"#\s+(.+)", s).group(1).strip(), "chapters": []}
+            parts.append(part); chap = None
+        elif re.match(r"##\s+\S", s):
+            if part is None:
+                part = {"title": None, "chapters": []}; parts.append(part)
+            chap = {"title": re.match(r"##\s+(.+)", s).group(1).strip(), "pieces": []}
+            part["chapters"].append(chap)
+        elif re.match(r"\s*[-*]\s+\S", s):
+            if part is None:
+                part = {"title": None, "chapters": []}; parts.append(part)
+            if chap is None:
+                chap = {"title": None, "pieces": []}; part["chapters"].append(chap)
+            chap["pieces"].append(re.match(r"\s*[-*]\s+(.+)", s).group(1).strip())
+    return parts
+
+
+def build_novel(args):
+    date = args.date or datetime.date.today().isoformat()
+    struct = parse_manifest(args.manifest)
+    allpaths, tiers, toc, blocks = [], set(), [], []
+    for part in struct:
+        if part["title"]:
+            toc.append(f"- **{part['title']}**"); blocks.append(f"# {part['title']}")
+        for chap in part["chapters"]:
+            if chap["title"]:
+                toc.append(f"  - {chap['title']}"); blocks.append(f"## {chap['title']}")
+            proses = []
+            for slug in chap["pieces"]:
+                fp = resolve_piece(slug)
+                if not fp:
+                    sys.exit(f"assemble: manifest piece not found: {slug}")
+                allpaths.append(fp)
+                fm, body = pm.ct.split_doc(open(fp, encoding="utf-8").read())
+                tiers.add(pm.tier_of(fm))
+                pr = piece_body(body)
+                proses.append(f"### {name_of(fm, fp)}\n\n{pr}" if args.headings else pr)
+            blocks.append("\n\n---\n\n".join(proses))
+    if not allpaths:
+        sys.exit("assemble: the manifest names no pieces.")
+    experience = tiers.pop() if len(tiers) == 1 else "mixed"
+    fm_lines = ["---", "type: deliverable", f"form: {args.form}", f"name: {args.title}",
+        "status: draft, not canon", f"experience: {experience}", "shippable: true",
+        f"assembled: {date}", "provenance: >-",
+        f"  Assembled {date} by tools/assemble.py from a book manifest, {len(allpaths)} pieces in the",
+        "  author's declared part and chapter order. Personal-record until masked; roots via constituents.",
+        "derives_from:"] + [f"  - {os.path.relpath(p, CFG['root'])}" for p in allpaths] + [
+        "carrier: inherited from constituents.", "---", "", f"# {args.title}", "", "## Contents", "", *toc, ""]
+    doc = "\n".join(fm_lines) + "\n\n" + "\n\n".join(blocks) + "\n"
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    open(args.out, "w", encoding="utf-8").write(doc)
+    words = len(re.findall(r"\S+", "\n\n".join(blocks)))
+    npart = sum(1 for p in struct if p["title"]); nchap = sum(len(p["chapters"]) for p in struct)
+    print(f"assembled {os.path.relpath(os.path.abspath(args.out), CFG['root'])}: {args.form}, "
+          f"{npart} part(s), {nchap} chapter(s), {len(allpaths)} pieces, ~{words} words, experience={experience}")
+    print("  a Contents map plus part/chapter structure; rooted through its constituents.")
+    return 0
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="Assemble ordered pieces into one deliverable.")
     ap.add_argument("pieces", nargs="*")
@@ -71,7 +148,12 @@ def main(argv):
     ap.add_argument("--carrier", default="", help="pull this carrier's cluster (default order) instead")
     ap.add_argument("--headings", action="store_true", help="keep each piece's title as a section heading")
     ap.add_argument("--date", default="", help="assembly date (YYYY-MM-DD); default today")
+    ap.add_argument("--manifest", default="", help="book manifest (markdown: # Part / ## Chapter / - piece) for novel-scale assembly")
+    ap.add_argument("--form", default="novella", help="deliverable form label: novella / novel / cycle")
     args = ap.parse_args(argv)
+
+    if args.manifest:
+        return build_novel(args)
 
     paths = [os.path.abspath(p) for p in args.pieces]
     if args.carrier:
