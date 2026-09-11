@@ -14,8 +14,9 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 
 ## Install (one time, on the writer's machine)
 
-1. Make sure `uv` is installed (the server runs under `uv run --with mcp`, so nothing needs a global
-   pip install).
+1. Make sure `uv` is installed (the server runs under `uv run --with 'mcp<2'`, so nothing needs a
+   global pip install). The `mcp<2` pin is deliberate: the SDK's 2.x line renamed the API this server
+   uses (FastMCP became MCPServer), so the connector is built and pinned against v1 for reproducibility.
 
 2. Open the desktop app's config file:
    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -27,8 +28,8 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
    {
      "mcpServers": {
        "yildun": {
-         "command": "uv",
-         "args": ["run", "--with", "mcp", "python",
+         "command": "/ABSOLUTE/PATH/TO/uv",
+         "args": ["run", "--with", "mcp<2", "python",
                   "/ABSOLUTE/PATH/TO/yildun/connector/server.py"],
          "env": {
            "YILDUN_HOME": "/ABSOLUTE/PATH/TO/yildun",
