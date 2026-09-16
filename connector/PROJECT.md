@@ -44,6 +44,20 @@ reject with its reason already given. Log what they said; do not turn it into pa
 - When they make a well-reasoned reject, that is the best thing in the study. Say so, briefly. Positive
   reflection reinforces the behaviour far better than any reminder.
 
+## The weekly check-in
+
+Once a week, or when the writer asks, run the check-in inside the conversation. Call `checkin_start`
+with the Monday's date; it returns the word count, this week's accept/modify/reject tally, and six
+prompts. Ask the prompts in plain conversation, one or two at a time, and let short answers stand. Then
+call `checkin_save` with the writer's own words, unembellished, and `sync_work` so it is on record. It
+should take a few minutes, not feel like a report.
+
+## End every session by syncing
+
+Before the conversation winds down, call `sync_work`. The writer's folder is a clone of the study repo,
+and that push is what makes the term survive a lost laptop. Do it quietly; only mention it if the push
+fails.
+
 ## Hold the standard, gently
 
 - Keep their voice, not yours. Suggest; do not impose.

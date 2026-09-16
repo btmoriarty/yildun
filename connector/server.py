@@ -150,6 +150,97 @@ def do_check(name):
     return {"ok": r.returncode == 0, "passed": r.returncode == 0, "output": (r.stdout + r.stderr).strip()}
 
 
+
+CHECKIN_TPL = """**Week of:** {week_of}
+**Words so far:** {words}
+**AMR this week:** accept {a} / modify {m} / reject {r}
+
+**What I did.** {what}
+
+**Where I had to step in.** {stepin}
+
+**Using the tools.** {tools}
+
+**Overrides.** {overrides}
+
+**Blockers and questions.** {blockers}
+
+**Rough time.** {time}
+"""
+
+CHECKIN_PROMPTS = {
+    "what": "What did you do this week? Two or three sentences on where the document moved.",
+    "stepin": "Where did you have to step in? The one or two decisions that mattered most.",
+    "tools": "How was using the tools? What worked, what confused you, where you lost time.",
+    "overrides": "Any gate you overrode at check, and why. If none, say none.",
+    "blockers": "Blockers and questions. What you need from your mentor to keep moving.",
+    "time": "Roughly how many hours this week, and where they went.",
+}
+
+
+def _week_counts(name, days=7):
+    """Accept/modify/reject counts from entries stamped within the last `days` days."""
+    import datetime as _dt
+    counts = {"accept": 0, "modify": 0, "reject": 0}
+    lp = _log_path(name)
+    if not os.path.exists(lp):
+        return counts
+    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
+    for line in open(lp, encoding="utf-8"):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            e = json.loads(line)
+            ts = _dt.datetime.fromisoformat(e["ts"].replace("Z", "+00:00"))
+        except Exception:
+            continue
+        if ts >= cutoff and e.get("verdict") in counts:
+            counts[e["verdict"]] += 1
+    return counts
+
+
+def do_checkin_start(name, week_of):
+    """Hand the partner what it needs to walk the writer through the weekly check-in."""
+    st = do_status(name)
+    wk = _week_counts(name)
+    return {"ok": True, "week_of": week_of, "words": st.get("words", 0), "this_week": wk,
+            "prompts": CHECKIN_PROMPTS,
+            "note": "Ask the prompts in plain conversation, one or two at a time. Then call checkin_save "
+                    "with the writer's answers; the counts above fill the header."}
+
+
+def do_checkin_save(name, week_of, what, stepin, tools, overrides, blockers, time):
+    st = do_status(name)
+    wk = _week_counts(name)
+    text = CHECKIN_TPL.format(week_of=week_of, words=st.get("words", 0), a=wk["accept"], m=wk["modify"],
+                              r=wk["reject"], what=what, stepin=stepin, tools=tools,
+                              overrides=overrides, blockers=blockers, time=time)
+    d = os.path.join(DRAFTS, "checkins")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, f"{week_of}.md")
+    open(path, "w", encoding="utf-8").write(text)
+    return {"ok": True, "path": path, "saved": True}
+
+
+def do_sync(message=""):
+    """Commit and push the writer's folder, so the term survives a lost laptop. The folder must be a
+    clone of the study repo (git finds the root from a subfolder)."""
+    r = subprocess.run(["git", "-C", DRAFTS, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return {"ok": False, "error": "the work folder is not inside a git repository; it should be a "
+                                      "clone of the study repo (see README)."}
+    root = r.stdout.strip()
+    subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True, text=True)
+    c = subprocess.run(["git", "-C", root, "commit", "-q", "-m", message or "writing session"],
+                       capture_output=True, text=True)
+    committed = c.returncode == 0
+    nothing = ("nothing to commit" in (c.stdout + c.stderr))
+    p = subprocess.run(["git", "-C", root, "push", "-q"], capture_output=True, text=True)
+    return {"ok": p.returncode == 0, "committed": committed, "nothing_new": nothing,
+            "pushed": p.returncode == 0, "detail": (c.stderr + p.stderr).strip()[:300]}
+
+
 # ---- MCP wiring (imported lazily so the core functions above stay testable) ----
 
 def build_server():
@@ -200,6 +291,26 @@ def build_server():
         """Run the voice gate on the document and return whether it passed. Call it when the writer asks,
         or at the end of a session."""
         return do_check(name)
+
+    @mcp.tool()
+    def checkin_start(name: str, week_of: str) -> dict:
+        """Begin the weekly check-in. Returns the writer's word count, this week's accept/modify/reject
+        tally, and the six prompts to ask in plain conversation, one or two at a time. `week_of` is the
+        Monday's date as YYYY-MM-DD. Do this once a week, or when the writer asks."""
+        return do_checkin_start(name, week_of)
+
+    @mcp.tool()
+    def checkin_save(name: str, week_of: str, what: str, stepin: str, tools: str,
+                     overrides: str, blockers: str, time: str) -> dict:
+        """Save the weekly check-in from the writer's own answers, into checkins/<week_of>.md in their
+        folder. Use their words; do not embellish. Call sync_work afterwards."""
+        return do_checkin_save(name, week_of, what, stepin, tools, overrides, blockers, time)
+
+    @mcp.tool()
+    def sync_work(message: str = "") -> dict:
+        """Commit and push the writer's folder so nothing is lost. Call it at the end of every session
+        and after saving a check-in. Quiet on success; report the error if the push fails."""
+        return do_sync(message)
 
     return mcp
 

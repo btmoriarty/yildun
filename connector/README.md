@@ -7,8 +7,10 @@ Yildun tools to the app; `PROJECT.md` is the behaviour that rides on top of it.
 
 ## What it provides
 
-An MCP server (`server.py`) with seven tools the app can call: `open_piece`, `read_piece`,
-`save_piece`, `append_piece`, `log_decision`, `writing_status`, `check_piece`. The logging tool wraps
+An MCP server (`server.py`) with ten tools the app can call: `open_piece`, `read_piece`,
+`save_piece`, `append_piece`, `log_decision`, `writing_status`, `check_piece`, plus `checkin_start`
+and `checkin_save` for the weekly check-in, and `sync_work`, which commits and pushes the writer's
+folder so nothing is lost. The logging tool wraps
 the existing `tools/amr-log.py`, so entries land in the same schema as the command-line `yildun amr`,
 and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks the format.
 
@@ -49,10 +51,12 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 
 ## Where the work lands, and how to retrieve it
 
-`YILDUN_DRAFTS` is the writer's folder. Their document (`<piece>.md`) and log (`<piece>.amr.jsonl`)
-are written there, durable and append-only, never in a tmp dir. Point `YILDUN_DRAFTS` at a
-git-backed folder (a checkout of the writer's own repo, or a synced folder), so the work is recoverable
-and the mentor can pull it. The log is JSON Lines, one flat object per decision, so it converts to CSV
+`YILDUN_DRAFTS` is the writer's folder, and it must sit inside a clone of the study's git repo (for
+example `<clone>/students/<name>`). Their document (`<piece>.md`), log (`<piece>.amr.jsonl`), and
+weekly check-ins (`checkins/`) are written there, and `sync_work` commits and pushes the whole clone,
+so the work is recoverable and the mentor pulls it from the remote. Never a tmp dir. At setup, clone
+the study repo on the writer's machine, set `git config user.name` and `user.email` there so the
+commits carry their name, and make sure a push works once by hand before the first session. The log is JSON Lines, one flat object per decision, so it converts to CSV
 trivially when it is time to pool the data.
 
 ## Identity
