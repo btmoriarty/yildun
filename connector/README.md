@@ -16,38 +16,39 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 
 ## Install (one time, on the writer's machine)
 
-1. Make sure `uv` is installed (the server runs under `uv run --with 'mcp<2'`, so nothing needs a
-   global pip install). The `mcp<2` pin is deliberate: the SDK's 2.x line renamed the API this server
-   uses (FastMCP became MCPServer), so the connector is built and pinned against v1 for reproducibility.
+The connector ships as an MCP bundle, `yildun.mcpb`, built by `build-bundle.sh` from `server.py`,
+`PROJECT.md`, and the `tools/` gates. It runs on python3 alone, no packages and no `uv`.
 
-2. Open the desktop app's config file:
-   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+**In a lab workspace** the admin adds the bundle to the organization's connector list (Admin settings,
+Connectors, Add, Custom, Desktop), and it appears for every member as an approved desktop extension.
+The writer installs it from the desktop app's connector settings, fills in the two fields the bundle
+asks for (author name, and the work folder inside their clone of the study repo), and it is running.
 
-3. Add the server (adjust the absolute paths):
+**Outside a workspace**, double-click `yildun.mcpb` on a machine with the Claude desktop app and fill
+in the same two fields.
 
-   ```json
-   {
-     "mcpServers": {
-       "yildun": {
-         "command": "/ABSOLUTE/PATH/TO/uv",
-         "args": ["run", "--with", "mcp<2", "python",
-                  "/ABSOLUTE/PATH/TO/yildun/connector/server.py"],
-         "env": {
-           "YILDUN_HOME": "/ABSOLUTE/PATH/TO/yildun",
-           "YILDUN_DRAFTS": "/ABSOLUTE/PATH/TO/the-writers-folder",
-           "YILDUN_AUTHOR": "the-writer-handle",
-           "YILDUN_ENGINE": "claude-desktop"
-         }
-       }
-     }
-   }
-   ```
+Then create a Project, paste `PROJECT.md` as the Project instructions, and write inside that Project.
 
-4. Restart the desktop app. The `yildun` tools should appear as an available connector.
+### Developer install, without the bundle
 
-5. Create a Project, and paste `PROJECT.md` as the Project instructions. The writer works inside that
-   Project from then on.
+Add the server to `claude_desktop_config.json` directly (adjust the absolute paths):
+
+```json
+{
+  "mcpServers": {
+    "yildun": {
+      "command": "python3",
+      "args": ["/ABSOLUTE/PATH/TO/yildun/connector/server.py"],
+      "env": {
+        "YILDUN_HOME": "/ABSOLUTE/PATH/TO/yildun",
+        "YILDUN_DRAFTS": "/ABSOLUTE/PATH/TO/the-writers-folder",
+        "YILDUN_AUTHOR": "the-writer-handle",
+        "YILDUN_ENGINE": "claude-desktop"
+      }
+    }
+  }
+}
+```
 
 ## Where the work lands, and how to retrieve it
 
@@ -75,6 +76,7 @@ already use, and the study wanted the logger to encourage rather than enforce.
 
 ## Testing the core without the app
 
-The tool logic in `server.py` is plain functions (`do_open`, `do_log`, `do_status`, `do_check`, ...)
-that do not import MCP, so they can be exercised directly with `YILDUN_DRAFTS`, `YILDUN_AUTHOR`, and
+The tool logic in `server.py` is plain functions (`do_open`, `do_log`, `do_status`, `do_check`, ...),
+and the MCP transport is a small standard-library JSON-RPC loop with no dependency, so both can be
+exercised directly with `YILDUN_DRAFTS`, `YILDUN_AUTHOR`, and
 `YILDUN_ENGINE` set, before wiring the server into the app.

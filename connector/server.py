@@ -19,7 +19,7 @@ Configuration, all via environment (set in claude_desktop_config.json):
   YILDUN_AUTHOR   the writer's handle, stamped on every AMR entry (identity cannot be retrofitted)
   YILDUN_ENGINE   the model the suggestions come from (defaults to claude-desktop)
 
-Run (as launched by the desktop app): uv run --with mcp python connector/server.py
+Run (as launched by the desktop app, or as a desktop extension): python3 connector/server.py. No packages.
 """
 import json
 import os
@@ -241,79 +241,148 @@ def do_sync(message=""):
             "pushed": p.returncode == 0, "detail": (c.stderr + p.stderr).strip()[:300]}
 
 
-# ---- MCP wiring (imported lazily so the core functions above stay testable) ----
+# ---- MCP over stdio, standard library only ----
+#
+# The Model Context Protocol's stdio transport is newline-delimited JSON-RPC 2.0. A server for tools
+# needs four methods: initialize, tools/list, tools/call, and ping, plus silence on notifications.
+# Implementing that here, with no third-party package, is what lets this connector ship as a desktop
+# extension that runs on any machine with python3, and what lets the install drop uv entirely.
 
-def build_server():
-    from mcp.server.fastmcp import FastMCP
-    mcp = FastMCP("yildun")
+SERVER_NAME = "yildun"
+SERVER_VERSION = "0.2.0"
+PROTOCOLS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 
-    @mcp.tool()
-    def open_piece(name: str, nonfiction: bool = False) -> dict:
-        """Create or open the writer's document (a piece). Call this at the start of a session, or when
-        the writer names a new piece. `nonfiction=true` for the non-fiction track."""
-        return do_open(name, nonfiction)
+def _s(desc): return {"type": "string", "description": desc}
 
-    @mcp.tool()
-    def read_piece(name: str) -> dict:
-        """Return the current text of the writer's document, so you work from what is actually on disk."""
-        return do_read(name)
+TOOL_TABLE = [
+    {"name": "open_piece",
+     "description": "Create or open the writer's document (a piece). Call this at the start of a session, or when "
+                    "the writer names a new piece. nonfiction=true for the non-fiction track.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name"), "nonfiction": {"type": "boolean", "default": False}},
+                     "required": ["name"]},
+     "handler": lambda a: do_open(a["name"], bool(a.get("nonfiction", False)))},
+    {"name": "read_piece",
+     "description": "Return the current text of the writer's document, so you work from what is actually on disk.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name")}, "required": ["name"]},
+     "handler": lambda a: do_read(a["name"])},
+    {"name": "save_piece",
+     "description": "Overwrite the document with new content. Only call this after the writer has decided on the "
+                    "change and that decision has been logged with log_decision.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name"), "content": _s("full document text")},
+                     "required": ["name", "content"]},
+     "handler": lambda a: do_save(a["name"], a["content"])},
+    {"name": "append_piece",
+     "description": "Append text to the end of the document. Same rule as save_piece: the writer decided, and the "
+                    "decision is logged, first.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name"), "text": _s("text to append")},
+                     "required": ["name", "text"]},
+     "handler": lambda a: do_append(a["name"], a["text"])},
+    {"name": "log_decision",
+     "description": "Record ONE Accept/Modify/Reject decision the writer just made about a suggestion. This is the "
+                    "study's core datum. Call it whenever the writer reacts to something you proposed, in the "
+                    "moment, as part of the flow, not as a separate ceremony. verdict is accept, modify, or reject. "
+                    "reason is the writer's OWN words for why, verbatim where you have them (leave empty rather than "
+                    "invent one). Do this quietly; do not announce it or ask permission to log.",
+     "inputSchema": {"type": "object",
+                     "properties": {"verdict": {"type": "string", "enum": ["accept", "modify", "reject"]},
+                                    "reason": _s("the writer's own words, or empty"), "piece": _s("piece name"),
+                                    "confidence": {"type": "integer", "minimum": 1, "maximum": 5},
+                                    "effort_s": {"type": "number"}},
+                     "required": ["verdict", "reason", "piece"]},
+     "handler": lambda a: do_log(a["verdict"], a.get("reason", ""), a["piece"], a.get("confidence"), a.get("effort_s"))},
+    {"name": "writing_status",
+     "description": "Return the writer's progress: word count and the running accept/modify/reject tally. Use it at "
+                    "a natural pause to reflect progress back lightly, never as a reminder to log.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name")}, "required": ["name"]},
+     "handler": lambda a: do_status(a["name"])},
+    {"name": "check_piece",
+     "description": "Run the voice gate on the document and return whether it passed. Call it when the writer asks, "
+                    "or at the end of a session.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name")}, "required": ["name"]},
+     "handler": lambda a: do_check(a["name"])},
+    {"name": "checkin_start",
+     "description": "Begin the weekly check-in. Returns the writer's word count, this week's accept/modify/reject "
+                    "tally, and the six prompts to ask in plain conversation, one or two at a time. week_of is the "
+                    "Monday's date as YYYY-MM-DD. Do this once a week, or when the writer asks.",
+     "inputSchema": {"type": "object", "properties": {"name": _s("piece name"), "week_of": _s("YYYY-MM-DD")},
+                     "required": ["name", "week_of"]},
+     "handler": lambda a: do_checkin_start(a["name"], a["week_of"])},
+    {"name": "checkin_save",
+     "description": "Save the weekly check-in from the writer's own answers, into checkins/<week_of>.md in their "
+                    "folder. Use their words; do not embellish. Call sync_work afterwards.",
+     "inputSchema": {"type": "object",
+                     "properties": {k: _s(k) for k in ("name", "week_of", "what", "stepin", "tools", "overrides", "blockers", "time")},
+                     "required": ["name", "week_of", "what", "stepin", "tools", "overrides", "blockers", "time"]},
+     "handler": lambda a: do_checkin_save(a["name"], a["week_of"], a["what"], a["stepin"], a["tools"],
+                                          a["overrides"], a["blockers"], a["time"])},
+    {"name": "sync_work",
+     "description": "Commit and push the writer's folder so nothing is lost. Call it at the end of every session "
+                    "and after saving a check-in. Quiet on success; report the error if the push fails.",
+     "inputSchema": {"type": "object", "properties": {"message": _s("commit message, optional")}},
+     "handler": lambda a: do_sync(a.get("message", ""))},
+]
+_BY_NAME = {t["name"]: t for t in TOOL_TABLE}
 
-    @mcp.tool()
-    def save_piece(name: str, content: str) -> dict:
-        """Overwrite the document with new content. Only call this after the writer has decided on the
-        change and that decision has been logged with log_decision."""
-        return do_save(name, content)
 
-    @mcp.tool()
-    def append_piece(name: str, text: str) -> dict:
-        """Append text to the end of the document. Same rule as save_piece: the writer decided, and the
-        decision is logged, first."""
-        return do_append(name, text)
+def _public(t):
+    return {"name": t["name"], "description": t["description"], "inputSchema": t["inputSchema"]}
 
-    @mcp.tool()
-    def log_decision(verdict: str, reason: str, piece: str,
-                     confidence: int = None, effort_s: float = None) -> dict:
-        """Record ONE Accept/Modify/Reject decision the writer just made about a suggestion. This is the
-        study's core datum. Call it whenever the writer reacts to something you proposed, in the moment,
-        as part of the flow, not as a separate ceremony. `verdict` is accept, modify, or reject.
-        `reason` is the writer's OWN words for why, verbatim where you have them (leave empty rather than
-        invent one). Do this quietly; do not announce it or ask permission to log."""
-        return do_log(verdict, reason, piece, confidence, effort_s)
 
-    @mcp.tool()
-    def writing_status(name: str) -> dict:
-        """Return the writer's progress: word count and the running accept/modify/reject tally. Use it at
-        a natural pause to reflect progress back lightly, never as a reminder to log."""
-        return do_status(name)
+def _result(id_, result):
+    return {"jsonrpc": "2.0", "id": id_, "result": result}
 
-    @mcp.tool()
-    def check_piece(name: str) -> dict:
-        """Run the voice gate on the document and return whether it passed. Call it when the writer asks,
-        or at the end of a session."""
-        return do_check(name)
 
-    @mcp.tool()
-    def checkin_start(name: str, week_of: str) -> dict:
-        """Begin the weekly check-in. Returns the writer's word count, this week's accept/modify/reject
-        tally, and the six prompts to ask in plain conversation, one or two at a time. `week_of` is the
-        Monday's date as YYYY-MM-DD. Do this once a week, or when the writer asks."""
-        return do_checkin_start(name, week_of)
+def _error(id_, code, message):
+    return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
 
-    @mcp.tool()
-    def checkin_save(name: str, week_of: str, what: str, stepin: str, tools: str,
-                     overrides: str, blockers: str, time: str) -> dict:
-        """Save the weekly check-in from the writer's own answers, into checkins/<week_of>.md in their
-        folder. Use their words; do not embellish. Call sync_work afterwards."""
-        return do_checkin_save(name, week_of, what, stepin, tools, overrides, blockers, time)
 
-    @mcp.tool()
-    def sync_work(message: str = "") -> dict:
-        """Commit and push the writer's folder so nothing is lost. Call it at the end of every session
-        and after saving a check-in. Quiet on success; report the error if the push fails."""
-        return do_sync(message)
+def handle(msg):
+    """Return a response dict, or None for notifications."""
+    method = msg.get("method")
+    id_ = msg.get("id")
+    params = msg.get("params") or {}
+    if id_ is None:                       # a notification: never answer
+        return None
+    if method == "initialize":
+        want = params.get("protocolVersion", "2024-11-05")
+        return _result(id_, {"protocolVersion": want if want in PROTOCOLS else "2024-11-05",
+                             "capabilities": {"tools": {"listChanged": False}},
+                             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION}})
+    if method == "ping":
+        return _result(id_, {})
+    if method == "tools/list":
+        return _result(id_, {"tools": [_public(t) for t in TOOL_TABLE]})
+    if method == "tools/call":
+        name = params.get("name"); args = params.get("arguments") or {}
+        t = _BY_NAME.get(name)
+        if not t:
+            return _error(id_, -32602, f"unknown tool: {name}")
+        try:
+            out = t["handler"](args)
+            return _result(id_, {"content": [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}],
+                                 "isError": not bool(out.get("ok", True))})
+        except Exception as e:  # noqa: BLE001
+            return _result(id_, {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}],
+                                 "isError": True})
+    return _error(id_, -32601, f"method not found: {method}")
 
-    return mcp
+
+def serve_stdio():
+    """One JSON-RPC message per line on stdin, one per line on stdout. Nothing else ever goes to stdout."""
+    out = sys.stdout
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            out.write(json.dumps(_error(None, -32700, "parse error")) + "\n"); out.flush()
+            continue
+        resp = handle(msg)
+        if resp is not None:
+            out.write(json.dumps(resp, ensure_ascii=False) + "\n"); out.flush()
 
 
 if __name__ == "__main__":
-    build_server().run()
+    serve_stdio()

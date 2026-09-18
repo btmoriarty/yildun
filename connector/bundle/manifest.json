@@ -1,0 +1,57 @@
+{
+  "manifest_version": "0.2",
+  "name": "yildun",
+  "display_name": "Yildun writing partner",
+  "version": "0.2.0",
+  "description": "The writing partner for the HOSL writing-partner study: the writer's document and Accept/Modify/Reject log build together in the desktop app, with the weekly check-in and a push to the study repository built in.",
+  "long_description": "Ten tools: open, read, save, and append the writer's piece; log each Accept/Modify/Reject decision in the shared study schema; report writing status; run the voice gate; run and save the weekly check-in; and commit and push the writer's folder so the term survives a lost laptop. Python 3 standard library only.",
+  "author": { "name": "Brian Moriarty", "url": "https://github.com/btmoriarty/yildun" },
+  "repository": { "type": "git", "url": "https://github.com/btmoriarty/yildun" },
+  "license": "MIT",
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python3",
+      "args": ["${__dirname}/server.py"],
+      "env": {
+        "YILDUN_HOME": "${__dirname}",
+        "YILDUN_DRAFTS": "${user_config.work_folder}",
+        "YILDUN_AUTHOR": "${user_config.author}",
+        "YILDUN_ENGINE": "claude-desktop"
+      }
+    }
+  },
+  "tools": [
+    { "name": "open_piece", "description": "Create or open the writer's document." },
+    { "name": "read_piece", "description": "Read the document from disk." },
+    { "name": "save_piece", "description": "Overwrite the document after a logged decision." },
+    { "name": "append_piece", "description": "Append to the document after a logged decision." },
+    { "name": "log_decision", "description": "Record one Accept/Modify/Reject decision, in the writer's words." },
+    { "name": "writing_status", "description": "Word count and the running decision tally." },
+    { "name": "check_piece", "description": "Run the voice gate on the document." },
+    { "name": "checkin_start", "description": "Begin the weekly check-in: tally and prompts." },
+    { "name": "checkin_save", "description": "Save the weekly check-in from the writer's answers." },
+    { "name": "sync_work", "description": "Commit and push the writer's folder." }
+  ],
+  "user_config": {
+    "author": {
+      "type": "string",
+      "title": "Your author name",
+      "description": "Stamped on every decision you log. Set once; it cannot be added to old entries later.",
+      "required": true
+    },
+    "work_folder": {
+      "type": "directory",
+      "title": "Your work folder",
+      "description": "Your folder inside the study repository clone, for example students/<you>. Your document, log, and check-ins are written here and pushed from here.",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "python": ">=3.9" }
+  },
+  "keywords": ["writing", "oversight", "HOSL", "AMR"]
+}
