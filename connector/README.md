@@ -19,27 +19,28 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 The connector ships as an MCP bundle, `yildun.mcpb`, built by `build-bundle.sh` from `server.py`,
 `PROJECT.md`, and the `tools/` gates. It runs on python3 alone, no packages and no `uv`.
 
-**Download the bundle; do not build your own.** An organization's desktop-extension allowlist permits
-one specific artifact, so a writer must install the same bytes the admin allowlisted. Get
-`connector/yildun.mcpb` from this repository (or the release), and check it matches:
+**In a lab workspace, the writer installs it from the app's own extension list, not from a file.** Once an
+organization turns on the desktop extension allowlist, members can no longer install an MCPB by dragging or
+double-clicking one, and an attempt returns "Contact your organization owner". The owner uploads the bundle
+once (Organization settings, Connectors, Desktop tab, Add custom extension), then adds it to the team from
+the entry's kebab menu, and it appears in the members' list for a one-click install. The writer fills in the
+two fields the bundle asks for: author name, and the work folder inside their clone of the study repo.
+
+To ship a new version, keep the manifest `name` unchanged, increment its `version`, and use "Upload new
+version" on the existing entry. Changing the name creates a second extension instead of replacing the first.
+
+**Outside a workspace**, double-click `yildun.mcpb` on a machine with the Claude desktop app and fill in the
+same two fields. Check the file first:
 
 ```
 shasum -a 256 yildun.mcpb
 ```
 
 ```
-f83640f458d86e5ca3293ff65d9aa82d66a65a22c3ed58ecccf2b680de2c097d
+0edaa6a3a1b2d062454bd1bd70b2e03426487417b82374081cb4e81efa052b7a
 ```
 
-**In a lab workspace** the admin adds that file to the organization's connector list (Admin settings,
-Connectors, Add, Custom, Desktop). The writer then installs the same file and fills in the two fields
-the bundle asks for: author name, and the work folder inside their clone of the study repo.
-
-**Outside a workspace**, double-click `yildun.mcpb` on a machine with the Claude desktop app and fill
-in the same two fields.
-
-The build is reproducible, so `build-bundle.sh` on the same source reproduces that hash exactly. If
-your rebuild does not match, install the downloaded file rather than your rebuild.
+The build is reproducible, so `build-bundle.sh` on the same source reproduces that hash exactly.
 
 Then create a Project, paste `PROJECT.md` as the Project instructions, and write inside that Project.
 
