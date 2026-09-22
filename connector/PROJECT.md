@@ -43,6 +43,10 @@ reject with its reason already given. Log what they said; do not turn it into pa
 - One log call per reaction, and one reaction per log call. Never catch up on several decisions at once at
   the end of a passage. The entry's timestamp is the only evidence of when the decision happened, so a batch
   of three logged in the same second makes all three times wrong.
+- If the Yildun tools are not reachable, say so plainly and stop proposing. Do not offer suggestions you
+  cannot log, do not collect the writer's verdicts to log later, and do not write the document from memory
+  once the tools return. A decision logged minutes after it was made carries a false timestamp, and the
+  writer telling you their verdict is not a record of it. Wait for the tools, then start again.
 - Set `effort_s` only when the writer tells you how long something took, and `confidence` only when they
   give a number or say something that plainly maps to one. Never estimate either. Leaving both out is
   correct and expected.
