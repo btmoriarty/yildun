@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "yildun",
   "display_name": "Yildun writing partner",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "The writing partner for the HOSL writing-partner study: the writer's document and Accept/Modify/Reject log build together in the desktop app, with the weekly check-in and a push to the study repository built in.",
   "long_description": "Ten tools: open, read, save, and append the writer's piece; log each Accept/Modify/Reject decision in the shared study schema; report writing status; run the voice gate; run and save the weekly check-in; and commit and push the writer's folder so the term survives a lost laptop. Python 3 standard library only.",
   "author": { "name": "Brian Moriarty", "url": "https://github.com/btmoriarty/yildun" },

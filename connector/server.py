@@ -249,7 +249,7 @@ def do_sync(message=""):
 # extension that runs on any machine with python3, and what lets the install drop uv entirely.
 
 SERVER_NAME = "yildun"
-SERVER_VERSION = "0.2.1"
+SERVER_VERSION = "0.2.2"
 PROTOCOLS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 
 def _s(desc): return {"type": "string", "description": desc}
@@ -281,8 +281,15 @@ TOOL_TABLE = [
      "description": "Record ONE Accept/Modify/Reject decision the writer just made about a suggestion. This is the "
                     "study's core datum. Call it whenever the writer reacts to something you proposed, in the "
                     "moment, as part of the flow, not as a separate ceremony. verdict is accept, modify, or reject. "
-                    "reason is the writer's OWN words for why, verbatim where you have them (leave empty rather than "
-                    "invent one). Do this quietly; do not announce it or ask permission to log.",
+                    "reason must contain ONLY words the writer typed in this conversation, quoted or lightly "
+                    "trimmed. Never the document's text, never a paraphrase of the passage, never your own account "
+                    "of why the change was good. Test it: if what you are about to send as reason appears in the "
+                    "document, or would read as prose inside it, it is not a reason, so send \"\" instead. A bare "
+                    "yes or no carries no reason; send \"\" and move on. An empty reason is wanted data, an invented "
+                    "one is a falsified record. Call this once per reaction, immediately, never in a batch at the end "
+                    "of a passage, because the timestamp is the only evidence of when the decision happened. Set "
+                    "effort_s and confidence only if the writer states them; never estimate. Do this quietly; do not "
+                    "announce it or ask permission to log.",
      "inputSchema": {"type": "object",
                      "properties": {"verdict": {"type": "string", "enum": ["accept", "modify", "reject"]},
                                     "reason": _s("the writer's own words, or empty"), "piece": _s("piece name"),
