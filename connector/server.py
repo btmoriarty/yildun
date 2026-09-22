@@ -249,7 +249,7 @@ def do_sync(message=""):
 # extension that runs on any machine with python3, and what lets the install drop uv entirely.
 
 SERVER_NAME = "yildun"
-SERVER_VERSION = "0.2.2"
+SERVER_VERSION = "0.2.3"
 PROTOCOLS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 
 def _s(desc): return {"type": "string", "description": desc}

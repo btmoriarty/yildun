@@ -37,7 +37,7 @@ shasum -a 256 yildun.mcpb
 ```
 
 ```
-e6155c4110c06ec6d6c0d723ffbe760784f3d0ba0dde7f33d0de492d754f2914
+e2ce8c48ae5f7c39a4f739007d9429528e1465ca08e5f83454cc05951810c0ab
 ```
 
 The build is reproducible, so `build-bundle.sh` on the same source reproduces that hash exactly.

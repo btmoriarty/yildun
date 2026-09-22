@@ -16,7 +16,8 @@ Fields (the shared review-record shape, plus the oversight extension):
   piece     the document stem
   verdict   accept | modify | reject
   note      what the suggestion was and why you did what you did (free text)
-  effort_s  seconds on the decision, if given (--effort); else null, and analysis derives it from ts
+  effort_s  seconds on the decision, self-reported by the writer (--effort); else null. Never estimated.
+  since_prev_s  whole seconds since the previous decision on this piece, stamped here; null on the first
   confidence 1-5 if given (--confidence); else null
 
 Usage (normally invoked via `yildun amr`, not directly):
@@ -29,6 +30,29 @@ import os
 import sys
 
 VERDICTS = {"accept", "modify", "reject"}
+
+
+def _since_prev(log, now):
+    """Whole seconds since the previous decision on this piece, or None.
+
+    Stamped here rather than reported by the writing partner, which has no clock and was estimating.
+    None on the first decision of a piece, and on anything unreadable or out of order. A long gap is a
+    break between sessions rather than a long deliberation, so analysis should window it, not average it.
+    """
+    try:
+        last = None
+        with open(log, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line:
+                    last = line
+        if last is None:
+            return None
+        prev = datetime.datetime.fromisoformat(json.loads(last)["ts"])
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+    delta = int((now - prev).total_seconds())
+    return delta if delta >= 0 else None
 
 
 def main(argv):
@@ -51,14 +75,16 @@ def main(argv):
     stem = os.path.splitext(os.path.basename(piece))[0]
     log = os.path.join(os.path.dirname(piece), stem + ".amr.jsonl")
     who = os.environ.get("YILDUN_AUTHOR", "").strip() or "unknown"
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
     entry = {
-        "ts": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat(),
+        "ts": now.isoformat(),
         "who": who,
         "engine": args.engine,
         "piece": stem,
         "verdict": verdict,
         "note": args.note,
         "effort_s": args.effort,
+        "since_prev_s": _since_prev(log, now),
         "confidence": args.confidence,
     }
     with open(log, "a", encoding="utf-8") as fh:
