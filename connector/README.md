@@ -19,13 +19,27 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 The connector ships as an MCP bundle, `yildun.mcpb`, built by `build-bundle.sh` from `server.py`,
 `PROJECT.md`, and the `tools/` gates. It runs on python3 alone, no packages and no `uv`.
 
-**In a lab workspace** the admin adds the bundle to the organization's connector list (Admin settings,
-Connectors, Add, Custom, Desktop), and it appears for every member as an approved desktop extension.
-The writer installs it from the desktop app's connector settings, fills in the two fields the bundle
-asks for (author name, and the work folder inside their clone of the study repo), and it is running.
+**Download the bundle; do not build your own.** An organization's desktop-extension allowlist permits
+one specific artifact, so a writer must install the same bytes the admin allowlisted. Get
+`connector/yildun.mcpb` from this repository (or the release), and check it matches:
+
+```
+shasum -a 256 yildun.mcpb
+```
+
+```
+f83640f458d86e5ca3293ff65d9aa82d66a65a22c3ed58ecccf2b680de2c097d
+```
+
+**In a lab workspace** the admin adds that file to the organization's connector list (Admin settings,
+Connectors, Add, Custom, Desktop). The writer then installs the same file and fills in the two fields
+the bundle asks for: author name, and the work folder inside their clone of the study repo.
 
 **Outside a workspace**, double-click `yildun.mcpb` on a machine with the Claude desktop app and fill
 in the same two fields.
+
+The build is reproducible, so `build-bundle.sh` on the same source reproduces that hash exactly. If
+your rebuild does not match, install the downloaded file rather than your rebuild.
 
 Then create a Project, paste `PROJECT.md` as the Project instructions, and write inside that Project.
 
