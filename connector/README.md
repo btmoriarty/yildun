@@ -16,6 +16,23 @@ and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks t
 
 ## Install (one time, on the writer's machine)
 
+**Prerequisite, and it is the one that actually bites: the writer's machine needs a python3 the desktop
+app can find.** The manifest calls the interpreter as bare `python3`, and the app resolves that against a
+path list it builds itself rather than against a login shell, so nothing in `.zshrc` or `.bash_profile`
+reaches it. The app logs which one it picked, and this is the line to read:
+
+```
+Using MCP server command: /opt/homebrew/bin/python3 with path: { ... }
+```
+
+A machine with no reachable python3 installs the bundle perfectly and then reports **"Unable to connect
+to extension server"** on every enable. Disabling, enabling and restarting the app do not clear it,
+because none of them change the environment. On macOS this is a bare machine with no Xcode command line
+tools, where `/usr/bin/python3` exists as a stub that does not run; on Windows `python3` usually resolves
+to nothing at all. **Send the writer to python.org for the installer rather than to a terminal**, because
+it needs no command line and it lands in `/usr/local/bin`, which is on the list the app searches.
+
+
 The connector ships as an MCP bundle, `yildun.mcpb`, built by `build-bundle.sh` from `server.py`,
 `PROJECT.md`, and the `tools/` gates. It runs on python3 alone, no packages and no `uv`.
 
@@ -95,3 +112,26 @@ The tool logic in `server.py` is plain functions (`do_open`, `do_log`, `do_statu
 and the MCP transport is a small standard-library JSON-RPC loop with no dependency, so both can be
 exercised directly with `YILDUN_DRAFTS`, `YILDUN_AUTHOR`, and
 `YILDUN_ENGINE` set, before wiring the server into the app.
+
+## When a writer says it will not connect
+
+Read the log before changing anything. On macOS:
+
+```
+sed -n '1,3p' "$HOME/Library/Logs/Claude/mcp-server-Yildun writing partner.log"
+```
+
+Line 3 names the interpreter the app resolved. If it names a path, the interpreter was found and the
+fault is further in; if the file does not exist or the line is missing, the server was never started and
+the prerequisite above is the cause.
+
+To see what is installed and how it got there:
+
+```
+ls "$HOME/Library/Application Support/Claude/Claude Extensions"
+```
+
+A `local.mcpb.` prefix means the bundle was installed from a file rather than from the workspace list.
+In an allowlisted workspace that should not be possible, so a writer who has one either installed it
+before the allowlist was turned on or is not in the workspace at all. **That distinction matters more
+than the error does**, because it decides whether the problem is their machine or their membership.
