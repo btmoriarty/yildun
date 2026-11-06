@@ -223,22 +223,120 @@ def do_checkin_save(name, week_of, what, stepin, tools, overrides, blockers, tim
     return {"ok": True, "path": path, "saved": True}
 
 
+def _git(root, *args):
+    # Stdin is closed because the server's own stdin carries the MCP messages.
+    return subprocess.run(["git", "-C", root, *args], stdin=subprocess.DEVNULL, capture_output=True, text=True)
+
+
+def _default_branch(root):
+    """The study repo's default branch, or None when it cannot be told. The local record comes first so
+    that an offline writer can still commit."""
+    r = _git(root, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if r.returncode == 0:
+        return r.stdout.strip().split("/", 1)[1]
+    for line in _git(root, "ls-remote", "--symref", "origin", "HEAD").stdout.splitlines():
+        if line.startswith("ref:") and line.endswith("\tHEAD"):
+            return line.split()[1].split("refs/heads/", 1)[-1]
+    return None
+
+
+def _changed(root, base, tip):
+    # -z keeps a non-ASCII piece name unquoted; --no-renames reports a moved log under its old path too.
+    r = _git(root, "diff", "--name-only", "--no-renames", "-z", base, tip)
+    return {p for p in r.stdout.split("\0") if p}
+
+
+def _rebase_conflict(root, upstream):
+    """Put the writer's commits on top of upstream. Returns None on success. Otherwise it returns the
+    files that collided, with the clone back where it started: the writer's commit in place and no
+    rebase left open."""
+    base = _git(root, "merge-base", "HEAD", upstream)
+    if base.returncode != 0:
+        return {"files": [], "intact": True, "detail": "no common history with the study repo"}
+    base = base.stdout.strip()
+    # A log is study data. Git would merge two edits to different lines of one log without complaint,
+    # and that merged file is one nobody wrote, so a log changed on both sides stops here untouched.
+    both = _changed(root, base, "HEAD") & _changed(root, base, upstream)
+    logs = sorted(p for p in both if p.endswith(".amr.jsonl"))
+    if logs:
+        return {"files": logs, "intact": True, "detail": "study log changed on both sides"}
+    before = _git(root, "rev-parse", "HEAD").stdout.strip()
+    branch = _git(root, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
+    rb = _git(root, "rebase", "-q", upstream)
+    if rb.returncode == 0:
+        return None
+    files = [p for p in _git(root, "diff", "--name-only", "--diff-filter=U", "-z").stdout.split("\0") if p]
+    _git(root, "rebase", "--abort")
+    after = _git(root, "rev-parse", "HEAD").stdout.strip()
+    on_branch = _git(root, "symbolic-ref", "--short", "-q", "HEAD").stdout.strip()
+    return {"files": sorted(files), "intact": after == before and on_branch == branch,
+            "detail": (rb.stderr + rb.stdout).strip()}
+
+
 def do_sync(message=""):
-    """Commit and push the writer's folder, so the term survives a lost laptop. The folder must be a
-    clone of the study repo (git finds the root from a subfolder)."""
-    r = subprocess.run(["git", "-C", DRAFTS, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    """Commit the writer's folder, rebase onto anything others have pushed, and push, so the term
+    survives a lost laptop and a mentor's push never strands the writer. The folder must be a clone of
+    the study repo (git finds the root from a subfolder). A failure after the commit leaves that commit
+    in place and says so in `error`, in words meant for the writer."""
+    r = subprocess.run(["git", "-C", DRAFTS, "rev-parse", "--show-toplevel"], stdin=subprocess.DEVNULL,
+                       capture_output=True, text=True)
     if r.returncode != 0:
         return {"ok": False, "error": "the work folder is not inside a git repository; it should be a "
                                       "clone of the study repo (see README)."}
     root = r.stdout.strip()
-    subprocess.run(["git", "-C", root, "add", "-A"], capture_output=True, text=True)
-    c = subprocess.run(["git", "-C", root, "commit", "-q", "-m", message or "writing session"],
-                       capture_output=True, text=True)
-    committed = c.returncode == 0
-    nothing = ("nothing to commit" in (c.stdout + c.stderr))
-    p = subprocess.run(["git", "-C", root, "push", "-q"], capture_output=True, text=True)
-    return {"ok": p.returncode == 0, "committed": committed, "nothing_new": nothing,
-            "pushed": p.returncode == 0, "detail": (c.stderr + p.stderr).strip()[:300]}
+    committed, nothing = False, False
+
+    def failed(error, detail="", **extra):
+        return {"ok": False, "committed": committed, "nothing_new": nothing, "pushed": False,
+                "error": error, "detail": detail[:300], **extra}
+
+    # The branch is checked before anything is committed, so the work never lands on the wrong branch.
+    b = _git(root, "symbolic-ref", "--short", "-q", "HEAD")
+    if b.returncode != 0:
+        return failed("Nothing was sent to the study repo, because the clone is not on a branch, which "
+                      "usually means an earlier pull stopped partway. Your files are untouched on this "
+                      "computer. Please ask your mentor to look at the clone.")
+    branch = b.stdout.strip()
+    default = _default_branch(root)
+    if default and branch != default:
+        return failed(f"Nothing was sent to the study repo, because the clone is on the branch '{branch}' "
+                      f"and saves go to '{default}'. Your files are untouched on this computer. Please "
+                      f"ask your mentor to switch the clone back to '{default}', then save again.")
+
+    _git(root, "add", "-A")
+    nothing = _git(root, "diff", "--cached", "--quiet").returncode == 0
+    if not nothing:
+        c = _git(root, "commit", "-q", "-m", message or "writing session")
+        if c.returncode != 0:
+            return failed("Your work could not be committed, so nothing was sent to the study repo. Your "
+                          "files are untouched on this computer. Please show your mentor this message.",
+                          (c.stderr + c.stdout).strip())
+        committed = True
+
+    f = _git(root, "fetch", "-q", "origin")
+    if f.returncode != 0:
+        return failed("Your work is saved on this computer, but it was not sent, because the study repo "
+                      "could not be reached. Check your connection and save again.", f.stderr.strip())
+
+    upstream = "refs/remotes/origin/" + branch
+    if _git(root, "rev-parse", "--verify", "-q", upstream).returncode == 0:
+        hit = _rebase_conflict(root, upstream)
+        if hit and not hit["intact"]:
+            return failed("Your work was not sent, and the save stopped partway while combining it with "
+                          "changes from the study repo. Please stop saving and ask your mentor to look at "
+                          "the clone before you write more.", hit["detail"], conflicts=hit["files"])
+        if hit:
+            where = "the same file (" + ", ".join(hit["files"]) + ")" if hit["files"] else "the same work"
+            return failed(f"Your work is saved on this computer, but it was not sent, because someone else "
+                          f"changed {where} in the study repo. Nothing was lost or changed. You can keep "
+                          f"writing. Please tell your mentor, who will need to sort out the two versions.",
+                          hit["detail"], conflicts=hit["files"])
+
+    p = _git(root, "push", "-q", "origin", branch)
+    if p.returncode != 0:
+        return failed("Your work is saved on this computer, but the push to the study repo failed. Save "
+                      "again in a minute, and tell your mentor if it fails twice.", p.stderr.strip())
+    return {"ok": True, "committed": committed, "nothing_new": nothing, "pushed": True, "detail": ""}
 
 
 # ---- MCP over stdio, standard library only ----
@@ -249,7 +347,7 @@ def do_sync(message=""):
 # extension that runs on any machine with python3, and what lets the install drop uv entirely.
 
 SERVER_NAME = "yildun"
-SERVER_VERSION = "0.2.4"
+SERVER_VERSION = "0.2.5"
 PROTOCOLS = {"2025-06-18", "2025-03-26", "2024-11-05"}
 
 def _s(desc): return {"type": "string", "description": desc}
@@ -323,8 +421,9 @@ TOOL_TABLE = [
      "handler": lambda a: do_checkin_save(a["name"], a["week_of"], a["what"], a["stepin"], a["tools"],
                                           a["overrides"], a["blockers"], a["time"])},
     {"name": "sync_work",
-     "description": "Commit and push the writer's folder so nothing is lost. Call it at the end of every session "
-                    "and after saving a check-in. Quiet on success; report the error if the push fails.",
+     "description": "Commit the writer's folder, bring in anything others pushed, and push, so nothing is lost. "
+                    "Call it at the end of every session and after saving a check-in. Quiet on success; report "
+                    "the `error` text if it fails.",
      "inputSchema": {"type": "object", "properties": {"message": _s("commit message, optional")}},
      "handler": lambda a: do_sync(a.get("message", ""))},
 ]

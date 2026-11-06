@@ -9,8 +9,8 @@ Yildun tools to the app; `PROJECT.md` is the behaviour that rides on top of it.
 
 An MCP server (`server.py`) with ten tools the app can call: `open_piece`, `read_piece`,
 `save_piece`, `append_piece`, `log_decision`, `writing_status`, `check_piece`, plus `checkin_start`
-and `checkin_save` for the weekly check-in, and `sync_work`, which commits and pushes the writer's
-folder so nothing is lost. The logging tool wraps
+and `checkin_save` for the weekly check-in, and `sync_work`, which commits the writer's folder, rebases
+onto anything others have pushed, and pushes, so nothing is lost. The logging tool wraps
 the existing `tools/amr-log.py`, so entries land in the same schema as the command-line `yildun amr`,
 and `check_piece` runs the same `tools/lint-voice.sh` gate. Nothing here forks the format.
 
@@ -54,7 +54,7 @@ shasum -a 256 yildun.mcpb
 ```
 
 ```
-656be36e8cb3fa37fa3fe9a39d2d4048de563505dbd523b568bc599636d9c0f5
+ce1ba9febe3bd59fb349af64342dd8314830258a7a64bb503181f8a395d30999
 ```
 
 The build is reproducible, so `build-bundle.sh` on the same source reproduces that hash exactly.
@@ -86,11 +86,38 @@ Add the server to `claude_desktop_config.json` directly (adjust the absolute pat
 
 `YILDUN_DRAFTS` is the writer's folder, and it must sit inside a clone of the study's git repo (for
 example `<clone>/students/<name>`). Their document (`<piece>.md`), log (`<piece>.amr.jsonl`), and
-weekly check-ins (`checkins/`) are written there, and `sync_work` commits and pushes the whole clone,
-so the work is recoverable and the mentor pulls it from the remote. Never a tmp dir. At setup, clone
-the study repo on the writer's machine, set `git config user.name` and `user.email` there so the
-commits carry their name, and make sure a push works once by hand before the first session. The log is JSON Lines, one flat object per decision, so it converts to CSV
-trivially when it is time to pool the data.
+weekly check-ins (`checkins/`) are written there, and `sync_work` commits the whole clone, rebases it
+onto the remote, and pushes it, so the work is recoverable and the mentor pulls it from the remote.
+Never a tmp dir. At setup, clone the study repo on the writer's machine, set `git config user.name` and
+`user.email` there so the commits carry their name, and make sure a push works once by hand before the
+first session. The log is JSON Lines, one flat object per decision, so it converts to CSV trivially when
+it is time to pool the data.
+
+### `sync_work` after someone else has pushed
+
+A mentor can push to the study repo at any time, and the writer never has to pull by hand. The writer's
+next `sync_work` puts their commit on top of the mentor's and pushes the result. These are the cases where
+it stops, and each one returns `ok: false` with an `error` written for the writer:
+
+| Case | What happens | Who acts |
+|---|---|---|
+| Both sides changed the same lines of a file | The rebase is aborted. The writer's commit stays in place, unpushed, and `conflicts` names the file. | Mentor |
+| Both sides changed the same `.amr.jsonl` | The sync stops before the rebase starts, and `conflicts` names the log. | Mentor |
+| The clone is on a branch other than the default, or on no branch | The sync stops before committing, and the writer's files stay as they are. | Mentor |
+| The study repo cannot be reached | The commit stays local, and the next `sync_work` sends it. | Writer |
+| Someone pushed in the moment before the push | The commit stays local, and the next `sync_work` rebases and sends it. | Writer |
+
+The log gets the stricter rule because it is study data. Git would merge two edits on different lines of
+one log without a conflict, and the result would be a file nobody wrote, so a log changed on both sides
+always stops. A log changed only by the writer reaches the remote byte for byte. A log changed only by the
+mentor reaches the writer's clone the same way, and `amr-log.py` reads the `ts` of the last line of that
+copy when it stamps `since_prev_s`.
+
+A rebase keeps the writer's author date on each commit and sets a new committer date. The timing in the
+study comes from the `ts` field inside the log, so neither date affects it.
+
+To resolve a stopped sync, the mentor works in the writer's clone or a copy of it, combines the two
+versions by hand, and pushes. For a log, keep every line from both sides and change none of them.
 
 ## Identity
 
@@ -112,6 +139,13 @@ The tool logic in `server.py` is plain functions (`do_open`, `do_log`, `do_statu
 and the MCP transport is a small standard-library JSON-RPC loop with no dependency, so both can be
 exercised directly with `YILDUN_DRAFTS`, `YILDUN_AUTHOR`, and
 `YILDUN_ENGINE` set, before wiring the server into the app.
+
+`test_sync.py` runs `do_sync` against throwaway bare remotes in a temp dir, with the standard library
+only:
+
+```
+python3 connector/test_sync.py
+```
 
 ## When a writer says it will not connect
 
