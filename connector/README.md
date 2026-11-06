@@ -30,7 +30,7 @@ to extension server"** on every enable. Disabling, enabling and restarting the a
 because none of them change the environment. On macOS this is a bare machine with no Xcode command line
 tools, where `/usr/bin/python3` exists as a stub that does not run; on Windows `python3` usually resolves
 to nothing at all. **Send the writer to python.org for the installer rather than to a terminal**, because
-it needs no command line and it lands in `/usr/local/bin`, which is on the list the app searches.
+it needs no command line and it installs into `/usr/local/bin`, which is on the list the app searches.
 
 
 The connector ships as an MCP bundle, `yildun.mcpb`, built by `build-bundle.sh` from `server.py`,
@@ -82,7 +82,7 @@ Add the server to `claude_desktop_config.json` directly (adjust the absolute pat
 }
 ```
 
-## Where the work lands, and how to retrieve it
+## Where the work is saved, and how to retrieve it
 
 `YILDUN_DRAFTS` is the writer's folder, and it must sit inside a clone of the study's git repo (for
 example `<clone>/students/<name>`). Their document (`<piece>.md`), log (`<piece>.amr.jsonl`), and
@@ -95,7 +95,7 @@ it is time to pool the data.
 
 ### `sync_work` after someone else has pushed
 
-A mentor can push to the study repo at any time, and the writer never has to pull by hand. The writer's
+A mentor can push to the study repo at any time, and the writer does not have to pull by hand. The writer's
 next `sync_work` puts their commit on top of the mentor's and pushes the result. These are the cases where
 it stops, and each one returns `ok: false` with an `error` written for the writer:
 
@@ -108,7 +108,7 @@ it stops, and each one returns `ok: false` with an `error` written for the write
 | Someone pushed in the moment before the push | The commit stays local, and the next `sync_work` rebases and sends it. | Writer |
 
 The log gets the stricter rule because it is study data. Git would merge two edits on different lines of
-one log without a conflict, and the result would be a file nobody wrote, so a log changed on both sides
+one log without a conflict, and the merged file would match neither side, so a log changed on both sides
 always stops. A log changed only by the writer reaches the remote byte for byte. A log changed only by the
 mentor reaches the writer's clone the same way, and `amr-log.py` reads the `ts` of the last line of that
 copy when it stamps `since_prev_s`.
@@ -117,7 +117,8 @@ A rebase keeps the writer's author date on each commit and sets a new committer 
 study comes from the `ts` field inside the log, so neither date affects it.
 
 To resolve a stopped sync, the mentor works in the writer's clone or a copy of it, combines the two
-versions by hand, and pushes. For a log, keep every line from both sides and change none of them.
+versions by hand, and pushes. In a log, the writer's lines stay exactly as written, including their `ts`
+and `since_prev_s` values.
 
 ## Identity
 
