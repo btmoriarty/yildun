@@ -73,6 +73,12 @@ watermark characters so no distributed file carries a hidden mark, renders the s
 with author, title, and date in the PDF metadata, and writes a provenance sidecar. Content Credentials
 (C2PA) embed where the format and c2patool support it.
 
+The sidecar answers the question a reader asks of AI-assisted writing: what came from the writer, and
+what came from the model. It lists the human roots the provenance map reaches and the Accept, Modify,
+and Reject counts from the AMR log of the piece and of every piece in its lineage. Each log is named
+with its SHA-256, so anyone holding the log can confirm the counts came from it. The sidecar carries
+counts only, and the notes stay in the logs.
+
 ## Getting material on disk
 
 `references/INTERROGATION.md` is the elicitation protocol: how to draw real material out of memory, one

@@ -11,7 +11,11 @@ and only here, so the checks that must hold at the boundary run here, not on a h
   3. RENDER   the shareable prose only (front matter and the Notes / Connections / Deepen-me apparatus
               dropped) to a PDF, with author, title, and date written into the PDF's own metadata.
   4. PROVENANCE  a sidecar `<out>.provenance.json` records author, engine, date, the source piece, the
-              commit, and that the gate passed: a portable record that travels with the file.
+              commit, and that the gate passed: a portable record that travels with the file. It also
+              carries the evidence for who decided what: the human roots the provenance map reaches,
+              and the Accept / Modify / Reject counts from the AMR log of the piece and of every piece
+              in its lineage, each log identified by its SHA-256 so a reader can check it against the
+              log itself. Counts only; the notes stay in the logs.
 
 Content Credentials (C2PA) are the intended provenance carrier, but the installed c2patool embeds only
 into media formats, not PDF, so for a prose export the provenance rides in the PDF metadata and the
@@ -22,7 +26,9 @@ signing cert (env C2PA_SIGN_CERT and C2PA_PRIVATE_KEY) to embed it.
     export.py deliverables/the-route.md --out exports/the-route.pdf
 """
 import argparse
+import collections
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -53,6 +59,46 @@ def strip_obfuscation(text):
             continue
         out.append(" " if o in SPACEY else ch)
     return "".join(out), removed
+
+
+def amr_summary(node):
+    """Summarize one piece's AMR log (`<piece>.amr.jsonl`), or return None when it has no log.
+
+    Counts, span, and engines only, never the notes, which can hold private material. The SHA-256
+    lets anyone holding the log confirm these counts came from it.
+    """
+    piece = os.path.join(ROOT, node)
+    log = os.path.splitext(piece)[0] + ".amr.jsonl"
+    if not os.path.exists(log):
+        return None
+    raw = open(log, "rb").read()
+    counts = collections.Counter({"accept": 0, "modify": 0, "reject": 0})
+    stamps, engines, unreadable = [], set(), 0
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        if not line.strip():
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            unreadable += 1
+            continue
+        v = str(e.get("verdict", "")).lower()
+        if v in counts:
+            counts[v] += 1
+        else:
+            unreadable += 1
+        if e.get("ts"):
+            stamps.append(e["ts"])
+        if e.get("engine"):
+            engines.add(e["engine"])
+    return {
+        "piece": node, "log": os.path.relpath(log, ROOT),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "decisions": sum(counts.values()), **dict(counts),
+        "unreadable": unreadable,
+        "first": min(stamps) if stamps else None, "last": max(stamps) if stamps else None,
+        "engines": sorted(engines),
+    }
 
 
 def main(argv):
@@ -105,15 +151,28 @@ def main(argv):
                               text=True).stdout.strip() or None
     except Exception:
         head = None
+    trace = {"nodes": [], "roots": []}
+    rooted = pm.walk(os.path.abspath(piece), ROOT, 0, 6, set(), quiet=True, trace=trace)
+    logs = [s for s in (amr_summary(n) for n in trace["nodes"]) if s]
+    totals = {k: sum(s[k] for s in logs) for k in ("decisions", "accept", "modify", "reject")}
     sidecar = out + ".provenance.json"
-    json.dump({
+    record = {
         "title": title, "author": author, "engine": engine, "date": date,
         "source": os.path.relpath(piece, ROOT), "commit": head,
         "gate": "passed", "obfuscation_stripped": removed, "exported_by": "yildun/export.py",
-    }, open(sidecar, "w", encoding="utf-8"), indent=2)
+        "lineage": {"rooted": rooted, "pieces": trace["nodes"], "human_roots": trace["roots"]},
+        "amr": {"logs": logs, "totals": totals,
+                "pieces_without_log": [n for n in trace["nodes"]
+                                       if n not in {s["piece"] for s in logs}]},
+    }
+    with open(sidecar, "w", encoding="utf-8") as fh:
+        json.dump(record, fh, indent=2)
 
     print(f"\nexport: wrote {os.path.relpath(out, ROOT)}")
     print(f"        provenance -> {os.path.relpath(sidecar, ROOT)} (author, date, source, commit, gate)")
+    print(f"        lineage: {len(trace['roots'])} human root(s) across {len(trace['nodes'])} piece(s); "
+          f"AMR: {totals['decisions']} decision(s) ({totals['accept']} accept, {totals['modify']} "
+          f"modify, {totals['reject']} reject) from {len(logs)} log(s).")
     print(f"        PDF metadata carries title/author/date.")
     if args.c2pa:
         print("export: C2PA embedding into PDF is not supported by the installed c2patool; the "

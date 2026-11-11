@@ -133,13 +133,23 @@ def resolve(ref, root):
     return paths
 
 
-def walk(path, root, depth, maxdepth, seen, indent="", quiet=False):
-    """Print the subtree (unless quiet); return True if this branch reaches a human root."""
+def walk(path, root, depth, maxdepth, seen, indent="", quiet=False, trace=None):
+    """Print the subtree (unless quiet); return True if this branch reaches a human root.
+
+    Pass `trace={"nodes": [], "roots": []}` to collect what the walk found: every piece it visited,
+    and every human root as {"kind", "node", "ref"}. export.py writes both into the sidecar.
+    """
     fm = read_fm(path)
     def out(s):
         if not quiet:
             print(s)
-    out(f"{indent}{os.path.relpath(path, root)}  [{tier_of(fm)}]")
+    node = os.path.relpath(path, root)
+    def found(kind, ref=None):
+        if trace is not None:
+            trace["roots"].append({"kind": kind, "node": node, "ref": ref})
+    if trace is not None and node not in trace["nodes"]:
+        trace["nodes"].append(node)
+    out(f"{indent}{node}  [{tier_of(fm)}]")
     if fm is None:
         out(f"{indent}   (unreadable)")
         return False
@@ -152,12 +162,15 @@ def walk(path, root, depth, maxdepth, seen, indent="", quiet=False):
         # ... properly rooted"). Memory/adaptation still demand a capture-root below; only a declared
         # fiction is rooted by construction, and the tier is the author's declaration to make.
         out(f"{ci}◆ author-invented fiction (experience: fiction) — HUMAN ROOT (authorship)")
+        found("authorship")
         rooted = True
     if has_own_verbatim(fm):
         out(f"{ci}◆ own captured drop (verbatim in front matter) — HUMAN ROOT")
+        found("verbatim")
         rooted = True
     if provenance_is_rooted(fm):
         out(f"{ci}◆ provenance names an author drop / capture — HUMAN ROOT")
+        found("provenance")
         rooted = True
     if path in seen or depth >= maxdepth:
         if depth >= maxdepth:
@@ -170,11 +183,13 @@ def walk(path, root, depth, maxdepth, seen, indent="", quiet=False):
             for child in children:
                 if os.path.abspath(child) == CAPTURES:
                     out(f"{ci}◆ {os.path.relpath(child, root)} (capture store) — HUMAN ROOT")
+                    found("capture_store", os.path.relpath(child, root))
                     rooted = True
                 else:
-                    rooted = walk(child, root, depth + 1, maxdepth, seen, ci, quiet) or rooted
+                    rooted = walk(child, root, depth + 1, maxdepth, seen, ci, quiet, trace) or rooted
         elif ROOT_MARKER.search(ref):
             out(f"{ci}◆ {ref[:88]} — HUMAN ROOT")
+            found("marker", ref)
             rooted = True
         else:
             out(f"{ci}✗ {ref[:88]} — UNRESOLVED (no file, no human-root marker)")

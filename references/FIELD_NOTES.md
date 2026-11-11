@@ -21,7 +21,8 @@ What it means for Yildun.
 
 1. The question the reader asked is the question the AMR log answers with a record. Without a
    log, the author can only assert where an idea came from, and the downvotes suggest readers do
-   not take that on trust.
+   not take that on trust. Acted on 2026-11-11: the export sidecar now carries the human roots and
+   the AMR counts, with each log's SHA-256, so the record travels with the exported file.
 2. His "editorial judgment" is what accept, modify and reject decisions capture, one decision at
    a time, with the reason in the note.
 3. "Fiction grounded in professional experience" is the rooted case: each piece traces to a
